@@ -1,0 +1,46 @@
+wget https://archive.apache.org/dist/spark/spark-2.3.0/spark-2.3.0-bin-hadoop2.7.tgz
+
+tar -xvf spark-2.3.0-bin-hadoop2.7.tgz
+
+cp spark-account-role.yaml spark-2.3.0-bin-hadoop2.7
+
+cp Dockerfile entrypoint.sh spark-2.3.0-bin-hadoop2.7/kubernetes/dockerfiles/spark
+
+cd ~/SPARK-2.3.0-k8-IGNITE/spark-ignite-streamer
+
+mvn clean install
+
+cd target
+
+zip -d spark-ignite-streamer-1.0-SNAPSHOT.jar 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*SF'
+
+cp spark-ignite-streamer-1.0-SNAPSHOT.jar ~/SPARK/spark-2.3.0-bin-hadoop2.7
+
+cd ~/SPARK/spark-2.3.0-bin-hadoop2.7
+
+docker build -t kaustav4284/spark-igniterdd1:firstbuild1 . -f kubernetes/dockerfiles/spark/Dockerfile
+
+docker push kaustav4284/spark-igniterdd1:firstbuild1
+
+kubectl delete serviceaccount default
+kubectl delete -f spark-account-role.yaml
+kubectl delete clusterrolebinding spark-role
+kubectl create serviceaccount default
+kubectl create -f spark-account-role.yaml
+kubectl create clusterrolebinding spark-role --clusterrole=default --serviceaccount=default:default --namespace=default
+
+bin/spark-submit \
+    --master k8s://https://192.168.1.243:6443 \
+    --deploy-mode cluster \
+    --name spark-pi \
+    --class com.kaustav.kafkaIgniteStreamer \
+    --conf spark.executor.instances=2 \
+    --conf spark.executor.heartbeatInterval=60\
+    --driver-memory 10g \
+    --executor-memory 10g \
+    --conf spark.kubernetes.container.image=kaustav4284/spark-igniterdd1:firstbuild1 \
+    --conf spark.kubernetes.namespace=default \
+    --conf spark.kubernetes.authenticate.driver.serviceAccountName=default \
+    local:///opt/spark/examples/jars/spark-ignite-streamer-1.0-SNAPSHOT.jar
+
+
